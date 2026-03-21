@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>MathBlaster</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#00ff88">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#000; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; font-family:'Courier New',monospace; overflow:hidden; touch-action:none; }
+
+    #wrap { position:relative; width:640px; height:360px; }
+    canvas { display:block; width:640px; height:360px; image-rendering:pixelated; }
+
+    /* Scale to fit any screen */
+    @media (max-width:660px) {
+      #wrap { width:100vw; height:56.25vw; }
+      canvas { width:100vw; height:56.25vw; }
+    }
+
+    /* ── Overlays ── */
+    .overlay {
+      position:absolute; inset:0;
+      background:rgba(0,0,0,0.85);
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:12px;
+    }
+    .overlay h1 { font-size:38px; letter-spacing:5px; text-shadow:0 0 20px currentColor; }
+    .overlay p  { color:#aaa; font-size:13px; text-align:center; line-height:1.8; max-width:360px; }
+    .big-btn {
+      padding:12px 40px; background:#00ff88; color:#000;
+      border:none; font-size:18px; font-family:'Courier New',monospace; font-weight:bold;
+      cursor:pointer; border-radius:4px; letter-spacing:2px; margin-top:6px;
+    }
+    .big-btn:active { opacity:0.8; }
+    .big-btn.red { background:#ff4444; color:#fff; }
+
+    /* ── Menu ── */
+    #menu h1 { color:#00ff88; }
+    #menu .subtitle { color:#00ff88; font-size:13px; letter-spacing:3px; }
+
+    /* ── Game Over ── */
+    #gameover h1 { color:#ff4444; }
+    #go-score { font-size:22px; color:#ffdd00; }
+    #go-hi    { font-size:14px; color:#aaa; }
+
+    /* ── Puzzle Overlay ── */
+    #puzzle-overlay {
+      position:absolute; bottom:0; left:0; right:0;
+      background:rgba(0,0,0,0.92);
+      border-top:2px solid #00ff88;
+      padding:10px 16px 14px;
+      display:none;
+    }
+    #pz-question {
+      font-size:24px; color:#fff; text-align:center;
+      margin-bottom:10px; letter-spacing:3px;
+    }
+    #pz-question span { color:#ffdd00; font-size:28px; }
+    #pz-answers { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+    .ans-btn {
+      width:80px; height:42px;
+      background:#112244; border:2px solid #3366cc;
+      color:#fff; font-size:18px;
+      font-family:'Courier New',monospace;
+      cursor:pointer; border-radius:6px;
+      transition:background 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .ans-btn:active  { background:#224488; }
+    .ans-btn.correct { background:#115511!important; border-color:#00ff88; color:#00ff88; }
+    .ans-btn.wrong   { background:#551111!important; border-color:#ff4444; color:#ff4444; }
+    #pz-timer-wrap { margin-top:8px; background:#222; height:6px; border-radius:3px; overflow:hidden; }
+    #pz-timer-bar  { height:100%; width:100%; background:#00ff88; transition:background 0.2s; }
+
+    /* ── Level Banner ── */
+    #level-banner {
+      position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+      font-size:32px; color:#00ff88; text-shadow:0 0 20px #00ff88;
+      font-weight:bold; letter-spacing:4px;
+      pointer-events:none; opacity:0; transition:opacity 0.3s;
+      white-space:nowrap;
+    }
+  </style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="canvas" width="640" height="360"></canvas>
+
+  <!-- Menu -->
+  <div class="overlay" id="menu">
+    <h1>MATHBLASTER</h1>
+    <div class="subtitle">SHOOT WITH MATH</div>
+    <p>
+      Enemies approach — solve the multiplication puzzle to fire!<br>
+      Faster answers = more powerful shots.<br>
+      Wrong answer or too slow = you take damage.
+    </p>
+    <button class="big-btn" onclick="startGame()">&#9654; PLAY</button>
+  </div>
+
+  <!-- Game Over -->
+  <div class="overlay" id="gameover" style="display:none">
+    <h1>GAME OVER</h1>
+    <div id="go-score">Score: 0</div>
+    <div id="go-hi">Best: 0</div>
+    <button class="big-btn red" onclick="startGame()">&#8634; RETRY</button>
+    <button class="big-btn" style="background:#224488;color:#fff" onclick="showMenu()">MENU</button>
+  </div>
+
+  <!-- Puzzle -->
+  <div id="puzzle-overlay">
+    <div id="pz-question"><span id="pz-q">?</span></div>
+    <div id="pz-answers"></div>
+    <div id="pz-timer-wrap"><div id="pz-timer-bar"></div></div>
+  </div>
+
+  <!-- Level Banner -->
+  <div id="level-banner"></div>
+</div>
+
+<script src="game.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+  }
+</script>
+</body>
+</html>

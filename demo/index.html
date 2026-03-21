@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MathBlaster — Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a1a; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Courier New', monospace; color: #fff; }
+
+    #game-container {
+      position: relative;
+      width: 640px;
+      height: 360px;
+      background: linear-gradient(180deg, #0d0d2b 0%, #0d0d2b 60%, #1a3a1a 60%, #1a3a1a 100%);
+      border: 3px solid #00ff88;
+      overflow: hidden;
+      box-shadow: 0 0 30px #00ff8844;
+    }
+
+    /* Stars */
+    .star { position: absolute; background: #fff; border-radius: 50%; animation: twinkle 2s infinite alternate; }
+    @keyframes twinkle { from { opacity: 0.3; } to { opacity: 1; } }
+
+    /* Ground line */
+    #ground { position: absolute; bottom: 60px; width: 100%; height: 3px; background: #2a6a2a; }
+
+    /* Mountains bg */
+    #mountains { position: absolute; bottom: 63px; width: 100%; height: 80px; }
+
+    /* Hero */
+    #hero {
+      position: absolute;
+      bottom: 63px;
+      left: 60px;
+      width: 32px;
+      height: 40px;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .hero-head { width: 18px; height: 14px; background: #f4c87a; border: 2px solid #c8a050; border-radius: 3px; position: relative; }
+    .hero-head::after { content: ''; position: absolute; top: 2px; left: 3px; width: 4px; height: 4px; background: #333; border-radius: 50%; }
+    .hero-body { width: 22px; height: 18px; background: #2255cc; border: 2px solid #1a3a99; border-radius: 2px; }
+    .hero-gun { position: absolute; top: 18px; right: -10px; width: 14px; height: 5px; background: #666; border-radius: 1px; }
+    .hero-legs { display: flex; gap: 4px; }
+    .hero-leg { width: 8px; height: 10px; background: #334; border: 1px solid #223; }
+
+    /* Enemy */
+    .enemy {
+      position: absolute;
+      bottom: 63px;
+      display: flex; flex-direction: column; align-items: center;
+      transition: left 0.05s linear;
+    }
+    .enemy-head { width: 18px; height: 14px; background: #cc2222; border: 2px solid #991111; border-radius: 3px; }
+    .enemy-body { width: 22px; height: 18px; background: #882222; border: 2px solid #661111; border-radius: 2px; }
+    .enemy-gun { position: absolute; top: 18px; left: -8px; width: 12px; height: 4px; background: #444; }
+    .enemy-legs { display: flex; gap: 4px; }
+    .enemy-leg { width: 8px; height: 10px; background: #552222; border: 1px solid #441111; }
+
+    /* Bullet */
+    .bullet {
+      position: absolute;
+      width: 16px; height: 5px;
+      background: #ffff00;
+      border-radius: 3px;
+      box-shadow: 0 0 8px #ffff00;
+      top: 0;
+    }
+
+    /* Explosion */
+    .explosion {
+      position: absolute;
+      bottom: 63px;
+      font-size: 28px;
+      animation: explode 0.5s forwards;
+      pointer-events: none;
+    }
+    @keyframes explode { 0%{transform:scale(0.5);opacity:1;} 100%{transform:scale(2);opacity:0;} }
+
+    /* HUD */
+    #hud {
+      position: absolute;
+      top: 8px; left: 0; right: 0;
+      display: flex; justify-content: space-between;
+      padding: 0 12px;
+      font-size: 13px;
+      color: #00ff88;
+      text-shadow: 0 0 6px #00ff88;
+    }
+
+    /* Puzzle card */
+    #puzzle-card {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(0,0,0,0.88);
+      border-top: 2px solid #00ff88;
+      padding: 10px 16px 12px;
+      display: none;
+    }
+    #puzzle-question {
+      font-size: 22px;
+      color: #fff;
+      text-align: center;
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+    }
+    #puzzle-question span { color: #ffdd00; font-size: 26px; }
+    #answers { display: flex; gap: 10px; justify-content: center; }
+    .ans-btn {
+      width: 70px; height: 36px;
+      background: #112244;
+      border: 2px solid #3366cc;
+      color: #fff;
+      font-size: 16px;
+      font-family: 'Courier New', monospace;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background 0.1s;
+    }
+    .ans-btn:hover { background: #224488; }
+    .ans-btn.correct { background: #115511; border-color: #00ff88; color: #00ff88; }
+    .ans-btn.wrong { background: #551111; border-color: #ff4444; color: #ff4444; }
+
+    /* Timer bar */
+    #timer-wrap { margin-top: 8px; background: #222; height: 6px; border-radius: 3px; overflow: hidden; }
+    #timer-bar { height: 100%; width: 100%; background: #00ff88; transition: width 0.1s linear, background 0.3s; }
+
+    /* Messages */
+    #msg {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 28px;
+      color: #ffdd00;
+      text-shadow: 0 0 12px #ffdd00;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+      white-space: nowrap;
+    }
+
+    /* Start / Game Over overlay */
+    #overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.82);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px;
+    }
+    #overlay h1 { font-size: 36px; color: #00ff88; text-shadow: 0 0 16px #00ff88; letter-spacing: 4px; }
+    #overlay p { color: #aaa; font-size: 13px; text-align: center; line-height: 1.7; }
+    #start-btn {
+      margin-top: 8px;
+      padding: 12px 36px;
+      background: #00ff88;
+      color: #000;
+      border: none;
+      font-size: 18px;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      cursor: pointer;
+      border-radius: 4px;
+      letter-spacing: 2px;
+    }
+    #start-btn:hover { background: #00cc66; }
+
+    /* Damage flash */
+    #damage-flash {
+      position: absolute; inset: 0;
+      background: rgba(255,0,0,0.3);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+    }
+
+    #title-below { margin-top: 10px; font-size: 12px; color: #444; letter-spacing: 3px; }
+  </style>
+</head>
+<body>
+<div id="game-container">
+  <!-- Stars -->
+  <div id="stars"></div>
+
+  <!-- Mountains SVG -->
+  <svg id="mountains" viewBox="0 0 640 80" preserveAspectRatio="none">
+    <polygon points="0,80 80,20 160,80" fill="#0d1f0d"/>
+    <polygon points="100,80 200,10 300,80" fill="#0a1a0a"/>
+    <polygon points="260,80 360,30 460,80" fill="#0d1f0d"/>
+    <polygon points="420,80 520,15 620,80" fill="#0a1a0a"/>
+    <polygon points="540,80 640,25 640,80" fill="#0d1f0d"/>
+  </svg>
+
+  <div id="ground"></div>
+  <div id="hero">
+    <div class="hero-head"></div>
+    <div style="position:relative">
+      <div class="hero-body"></div>
+      <div class="hero-gun"></div>
+    </div>
+    <div class="hero-legs">
+      <div class="hero-leg"></div>
+      <div class="hero-leg"></div>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div id="hud-hearts">♥ ♥ ♥</div>
+    <div id="hud-level">LEVEL 1</div>
+    <div id="hud-score">SCORE: 0</div>
+  </div>
+
+  <div id="msg"></div>
+  <div id="damage-flash"></div>
+
+  <div id="puzzle-card">
+    <div id="puzzle-question">? × ? = <span id="q-display">__</span></div>
+    <div id="answers"></div>
+    <div id="timer-wrap"><div id="timer-bar"></div></div>
+  </div>
+
+  <div id="overlay">
+    <h1>MATHBLASTER</h1>
+    <p>Enemies approach — solve the puzzle to shoot!<br>Answer faster = more powerful shot.<br>Wrong answer = take damage.</p>
+    <button id="start-btn" onclick="startGame()">▶ START</button>
+  </div>
+</div>
+<div id="title-below">MATHBLASTER DEMO — solve multiplication tables to shoot</div>
+
+<script>
+// ── Stars ──────────────────────────────────────────────────────────
+const starsEl = document.getElementById('stars');
+for (let i = 0; i < 40; i++) {
+  const s = document.createElement('div');
+  s.className = 'star';
+  const sz = Math.random() * 2 + 1;
+  s.style.cssText = `width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*55}%;animation-delay:${Math.random()*2}s`;
+  starsEl.appendChild(s);
+}
+
+// ── State ──────────────────────────────────────────────────────────
+let score = 0, hearts = 3, level = 1;
+let enemyX = 600, enemySpeed = 0.4;
+let enemyEl = null;
+let puzzleActive = false, correctAnswer = 0, timerInterval = null, timerVal = 100;
+let timerMax = 5000; // ms for full timer
+let gameRunning = false;
+let enemyKillsInLevel = 0, killsNeeded = 3;
+let animFrame;
+
+const gc = document.getElementById('game-container');
+const heroEl = document.getElementById('hero');
+const puzzleCard = document.getElementById('puzzle-card');
+const answersEl = document.getElementById('answers');
+const qDisplay = document.getElementById('q-display');
+const timerBar = document.getElementById('timer-bar');
+const msgEl = document.getElementById('msg');
+const overlay = document.getElementById('overlay');
+const hudHearts = document.getElementById('hud-hearts');
+const hudLevel = document.getElementById('hud-level');
+const hudScore = document.getElementById('hud-score');
+const damageFlash = document.getElementById('damage-flash');
+
+// ── Tables by level ────────────────────────────────────────────────
+function getTableRange(lvl) {
+  if (lvl <= 2) return [2, 3];
+  if (lvl <= 4) return [4, 5];
+  if (lvl <= 6) return [6, 7];
+  return [8, 12];
+}
+
+function makePuzzle(lvl) {
+  const [lo, hi] = getTableRange(lvl);
+  const a = Math.floor(Math.random() * (hi - lo + 1)) + lo;
+  const b = Math.floor(Math.random() * 9) + 2;
+  const correct = a * b;
+  // 3 wrong answers
+  const wrongs = new Set();
+  while (wrongs.size < 3) {
+    const offset = (Math.floor(Math.random() * 5) + 1) * (Math.random() < 0.5 ? 1 : -1);
+    const w = correct + offset;
+    if (w > 0 && w !== correct) wrongs.add(w);
+  }
+  const opts = [...wrongs, correct].sort(() => Math.random() - 0.5);
+  return { a, b, correct, opts, label: `${a} × ${b}` };
+}
+
+// ── Spawn enemy ────────────────────────────────────────────────────
+function spawnEnemy() {
+  if (enemyEl) enemyEl.remove();
+  enemyX = 620;
+  enemyEl = document.createElement('div');
+  enemyEl.className = 'enemy';
+  enemyEl.innerHTML = `
+    <div class="enemy-head"></div>
+    <div style="position:relative">
+      <div class="enemy-body"></div>
+      <div class="enemy-gun"></div>
+    </div>
+    <div class="enemy-legs"><div class="enemy-leg"></div><div class="enemy-leg"></div></div>`;
+  enemyEl.style.left = enemyX + 'px';
+  gc.appendChild(enemyEl);
+  // Show puzzle immediately
+  showPuzzle();
+}
+
+// ── Puzzle display ─────────────────────────────────────────────────
+function showPuzzle() {
+  if (!gameRunning) return;
+  puzzleActive = true;
+  const p = makePuzzle(level);
+  correctAnswer = p.correct;
+  qDisplay.textContent = p.label + ' = ?';
+  answersEl.innerHTML = '';
+  p.opts.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'ans-btn';
+    btn.textContent = opt;
+    btn.onclick = () => checkAnswer(opt, btn);
+    answersEl.appendChild(btn);
+  });
+  puzzleCard.style.display = 'block';
+  startTimer();
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timerVal = 100;
+  timerBar.style.width = '100%';
+  timerBar.style.background = '#00ff88';
+  const step = 100 / (timerMax / 50);
+  timerInterval = setInterval(() => {
+    timerVal -= step;
+    timerBar.style.width = Math.max(0, timerVal) + '%';
+    if (timerVal < 50) timerBar.style.background = '#ffaa00';
+    if (timerVal < 20) timerBar.style.background = '#ff4444';
+    if (timerVal <= 0) {
+      clearInterval(timerInterval);
+      timeUp();
+    }
+  }, 50);
+}
+
+function timeUp() {
+  puzzleActive = false;
+  flashDamage();
+  takeDamage('TOO SLOW!');
+}
+
+// ── Answer check ───────────────────────────────────────────────────
+let puzzleStartTime = 0;
+function showPuzzle() {
+  if (!gameRunning) return;
+  puzzleActive = true;
+  puzzleStartTime = Date.now();
+  const p = makePuzzle(level);
+  correctAnswer = p.correct;
+  qDisplay.textContent = p.label + ' = ?';
+  answersEl.innerHTML = '';
+  p.opts.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'ans-btn';
+    btn.textContent = opt;
+    btn.onclick = () => checkAnswer(opt, btn);
+    answersEl.appendChild(btn);
+  });
+  puzzleCard.style.display = 'block';
+  startTimer();
+}
+
+function checkAnswer(val, btn) {
+  if (!puzzleActive) return;
+  clearInterval(timerInterval);
+  puzzleActive = false;
+  const elapsed = (Date.now() - puzzleStartTime) / 1000;
+
+  if (val === correctAnswer) {
+    btn.classList.add('correct');
+    const shotType = elapsed < 1 ? '💥 MEGA BLAST!' : elapsed < 2 ? '⚡ POWER SHOT!' : elapsed < 4 ? '🔫 SHOT!' : '😅 WEAK SHOT';
+    const pts = elapsed < 1 ? 300 : elapsed < 2 ? 200 : elapsed < 4 ? 100 : 50;
+    score += pts;
+    updateHUD();
+    shootBullet(elapsed);
+    showMsg(shotType);
+    setTimeout(() => {
+      puzzleCard.style.display = 'none';
+      destroyEnemy();
+    }, 600);
+  } else {
+    btn.classList.add('wrong');
+    // show correct
+    Array.from(answersEl.children).forEach(b => {
+      if (parseInt(b.textContent) === correctAnswer) b.classList.add('correct');
+    });
+    flashDamage();
+    takeDamage('WRONG!');
+    setTimeout(() => { puzzleCard.style.display = 'none'; }, 700);
+  }
+}
+
+// ── Bullet animation ───────────────────────────────────────────────
+function shootBullet(elapsed) {
+  const bullet = document.createElement('div');
+  bullet.className = 'bullet';
+  const heroTop = gc.offsetHeight - 63 - 30;
+  bullet.style.top = heroTop + 'px';
+  bullet.style.left = '100px';
+  const size = elapsed < 1 ? '24px' : elapsed < 2 ? '18px' : '12px';
+  bullet.style.height = size;
+  bullet.style.width = elapsed < 1 ? '40px' : '16px';
+  gc.appendChild(bullet);
+  let bx = 100;
+  const bspeed = elapsed < 1 ? 14 : 10;
+  const bi = setInterval(() => {
+    bx += bspeed;
+    bullet.style.left = bx + 'px';
+    if (bx > enemyX + 10) { clearInterval(bi); bullet.remove(); }
+  }, 16);
+}
+
+// ── Enemy destroyed ────────────────────────────────────────────────
+function destroyEnemy() {
+  if (enemyEl) {
+    const exp = document.createElement('div');
+    exp.className = 'explosion';
+    exp.textContent = '💥';
+    exp.style.left = (enemyX - 10) + 'px';
+    gc.appendChild(exp);
+    setTimeout(() => exp.remove(), 500);
+    enemyEl.remove();
+    enemyEl = null;
+  }
+  enemyKillsInLevel++;
+  if (enemyKillsInLevel >= killsNeeded) {
+    levelUp();
+  } else {
+    setTimeout(spawnEnemy, 800);
+  }
+}
+
+// ── Level up ───────────────────────────────────────────────────────
+function levelUp() {
+  level++;
+  enemyKillsInLevel = 0;
+  killsNeeded = Math.min(3 + Math.floor(level / 2), 8);
+  enemySpeed = 0.4 + level * 0.08;
+  timerMax = Math.max(2000, 5000 - level * 250);
+  showMsg(`LEVEL ${level}!`);
+  hudLevel.textContent = `LEVEL ${level}`;
+  setTimeout(spawnEnemy, 1200);
+}
+
+// ── Damage ─────────────────────────────────────────────────────────
+function takeDamage(reason) {
+  hearts--;
+  updateHUD();
+  showMsg(reason);
+  if (hearts <= 0) { gameOver(); return; }
+  setTimeout(() => {
+    if (gameRunning && !enemyEl) spawnEnemy();
+    else if (gameRunning && enemyEl) showPuzzle(); // retry puzzle
+  }, 900);
+}
+
+function flashDamage() {
+  damageFlash.style.opacity = 1;
+  setTimeout(() => damageFlash.style.opacity = 0, 300);
+}
+
+// ── HUD ────────────────────────────────────────────────────────────
+function updateHUD() {
+  hudHearts.textContent = '♥ '.repeat(hearts).trim() || '💀';
+  hudScore.textContent = 'SCORE: ' + score;
+}
+
+function showMsg(txt) {
+  msgEl.textContent = txt;
+  msgEl.style.opacity = 1;
+  setTimeout(() => msgEl.style.opacity = 0, 900);
+}
+
+// ── Enemy movement loop ────────────────────────────────────────────
+function gameLoop() {
+  if (!gameRunning) return;
+  if (enemyEl && !puzzleActive) {
+    // enemy advances when puzzle not shown (between answer and next puzzle)
+    enemyX -= enemySpeed;
+    enemyEl.style.left = enemyX + 'px';
+    if (enemyX < 110) {
+      // reached hero
+      enemyEl.remove(); enemyEl = null;
+      flashDamage();
+      takeDamage('GOT HIT!');
+      return;
+    }
+  }
+  if (enemyEl && puzzleActive) {
+    // enemy slowly creeps even during puzzle
+    enemyX -= enemySpeed * 0.3;
+    enemyEl.style.left = enemyX + 'px';
+  }
+  animFrame = requestAnimationFrame(gameLoop);
+}
+
+// ── Start / Game Over ──────────────────────────────────────────────
+function startGame() {
+  score = 0; hearts = 3; level = 1;
+  enemyKillsInLevel = 0; killsNeeded = 3;
+  enemySpeed = 0.4; timerMax = 5000;
+  gameRunning = true;
+  overlay.style.display = 'none';
+  updateHUD();
+  hudLevel.textContent = 'LEVEL 1';
+  if (enemyEl) { enemyEl.remove(); enemyEl = null; }
+  spawnEnemy();
+  animFrame = requestAnimationFrame(gameLoop);
+}
+
+function gameOver() {
+  gameRunning = false;
+  clearInterval(timerInterval);
+  cancelAnimationFrame(animFrame);
+  puzzleCard.style.display = 'none';
+  if (enemyEl) { enemyEl.remove(); enemyEl = null; }
+  overlay.innerHTML = `
+    <h1 style="color:#ff4444;text-shadow:0 0 16px #ff4444">GAME OVER</h1>
+    <p style="font-size:20px;color:#ffdd00">Score: ${score} &nbsp;|&nbsp; Level: ${level}</p>
+    <p style="color:#aaa;font-size:12px">Keep practicing your multiplication tables!</p>
+    <button id="start-btn" onclick="startGame()" style="margin-top:8px;padding:12px 36px;background:#ff4444;color:#fff;border:none;font-size:18px;font-family:'Courier New',monospace;font-weight:bold;cursor:pointer;border-radius:4px;letter-spacing:2px">↺ RETRY</button>`;
+  overlay.style.display = 'flex';
+}
+</script>
+</body>
+</html>
