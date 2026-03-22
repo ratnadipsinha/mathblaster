@@ -117,7 +117,7 @@ function genPuzzle() {
 function startPuzzle() {
   if (GS.state === 'GAME_OVER') return;
   const p = genPuzzle();
-  const ms = Math.max(2000, 5200 - (GS.round - 1) * 300);
+  const ms = Math.max(1400, 4800 - (GS.round - 1) * 380);
   PZ = { active:true, ...p, startTime:performance.now(), timerMs:ms, timerPct:1, answered:false };
   document.getElementById('pz-question').textContent = `${p.a} × ${p.b} = ?`;
   const ansEl = document.getElementById('pz-answers');
@@ -219,26 +219,37 @@ function doPlayerPunch(count, elapsed) {
   }, count * delay + 520);
 }
 
-function doMonsterPunch(dmg) {
-  MA.state = 'PUNCH'; MA.t = 0;
-  setTimeout(() => {
-    if (GS.state === 'GAME_OVER') return;
-    GS.playerHP = Math.max(0, GS.playerHP - dmg);
-    PA.state = 'HURT'; PA.t = 0;
-    GS.shake = 12;
-    SFX.hurt();
-    addFloat('-' + dmg, 140, 155, '#ff4444', 14);
-    if (GS.playerHP <= 0) {
-      PA.state = 'KO';
-      SFX.ko();
-      setTimeout(triggerGameOver, 1700);
-    }
-  }, 440);
+function doMonsterPunch(baseDmg) {
+  // Higher rounds = more punches in the combo (1 → up to 4)
+  const comboPunches = Math.min(1 + Math.floor(GS.round / 2), 4);
+  const dmgEach = Math.round(baseDmg / comboPunches);
+  const punchInterval = Math.max(180, 320 - GS.round * 18); // gets faster each round
+
+  for (let i = 0; i < comboPunches; i++) {
+    setTimeout(() => {
+      if (GS.state === 'GAME_OVER') return;
+      MA.state = 'PUNCH'; MA.t = 0;
+      setTimeout(() => {
+        if (GS.state === 'GAME_OVER') return;
+        GS.playerHP = Math.max(0, GS.playerHP - dmgEach);
+        PA.state = 'HURT'; PA.t = 0;
+        GS.shake = 6 + GS.round;
+        SFX.hurt();
+        addFloat('-' + dmgEach, 130 - i * 10, 155 - i * 15, '#ff4444', 13);
+        if (GS.playerHP <= 0) {
+          PA.state = 'KO'; SFX.ko();
+          setTimeout(triggerGameOver, 1700);
+        }
+      }, 280);
+    }, i * punchInterval);
+  }
+
+  const totalTime = comboPunches * punchInterval + 500;
   setTimeout(() => {
     if (MA.state === 'PUNCH') { MA.state = 'IDLE'; MA.t = 0; }
     if (PA.state === 'HURT')  { PA.state = 'IDLE'; PA.t = 0; }
     if (GS.state !== 'GAME_OVER') afterExchange();
-  }, 1050);
+  }, totalTime);
 }
 
 function afterExchange() {
@@ -354,127 +365,245 @@ function drawRing(t) {
   ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fillRect(22, FLOOR_Y - 58, 10, 12); ctx.fillRect(W - 32, FLOOR_Y - 58, 10, 12);
 }
 
-// ── Draw Player (Mario-style, big) ───────────────────────────────
+// ── Draw Player — Athletic Boxer (Mario) ─────────────────────────
 function drawPlayer(t) {
   const cx = 160, by = FLOOR_Y;
   const state = PA.state;
+  ctx.save();
+
+  // ── Pose parameters ──────────────────────────────────────────────
+  // punch progress 0→1→0
+  const pp = state === 'PUNCH' ? Math.min(1, PA.t / 8) : 0;
+  const hurtProg = state === 'HURT' ? Math.min(1, PA.t / 6) : 0;
+
+  // Body lean (torso tilts forward on punch, snaps back on hurt)
+  const torsoLean = state === 'PUNCH' ? 0.28 * pp
+                  : state === 'HURT'  ? -0.25
+                  : state === 'KO'    ? 0.5
+                  : 0;
+  // Hip forward shift on punch
+  const hipX = state === 'PUNCH' ? 18 * pp : state === 'HURT' ? -14 : 0;
+  // Bob in idle
+  const bob   = state === 'IDLE' || state === 'WIN' ? Math.sin(t * 0.08) * 3 : 0;
+  // WIN jump
+  const winY  = state === 'WIN' ? -Math.abs(Math.sin(t * 0.13)) * 18 : 0;
+  // KO fall
+  if (state === 'KO') { ctx.translate(cx, by); ctx.rotate(0.45); ctx.translate(-cx, -by); }
+
+  const bx = cx + hipX;          // base x (hip centre)
+  const bby = by + winY;          // base y (feet)
+
+  // ── Shadow ────────────────────────────────────────────────────────
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.ellipse(bx, bby - 4, 42 + pp * 10, 9, 0, 0, Math.PI * 2); ctx.fill();
+
+  // ── LEGS ──────────────────────────────────────────────────────────
+  // Stance: back leg (right) straight, front leg (left) bent forward
+  const stanceLean = state === 'PUNCH' ? 0.14 * pp : 0;
+
+  // Back leg — straight
+  ctx.fillStyle = '#cc1111';  // red shorts
+  ctx.save();
+  ctx.translate(bx + 16, bby - 4);
+  ctx.rotate(stanceLean);
+  ctx.fillRect(-10, -58, 20, 58);  // thigh + shin
+  ctx.restore();
+
+  // Front leg — bent (knee forward)
+  ctx.save();
+  ctx.translate(bx - 14, bby - 4);
+  ctx.rotate(-stanceLean * 0.5);
+  ctx.fillStyle = '#cc1111';
+  ctx.fillRect(-10, -56, 20, 30);  // thigh
+  ctx.fillRect(-8, -28, 18, 28);   // shin (slightly forward)
+  ctx.restore();
+
+  // Shorts — waistband + hem
+  ctx.fillStyle = '#ee2222';
+  ctx.beginPath();
+  ctx.ellipse(bx, bby - 62, 30, 22, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffffff';  // white waistband
+  ctx.fillRect(bx - 30, bby - 82, 60, 9);
+  ctx.fillStyle = '#ee3333';
+  ctx.fillRect(bx - 29, bby - 81, 58, 7);
+
+  // Boots (black, like reference)
+  const bootL = bx - 14, bootR = bx + 16;
+  ctx.fillStyle = '#111111';
+  // Front boot
+  ctx.beginPath(); ctx.ellipse(bootL - 4, bby - 6, 22, 12, -0.12, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(bootL - 10, bby - 28, 20, 22);
+  // Back boot
+  ctx.beginPath(); ctx.ellipse(bootR + 4, bby - 6, 20, 11, 0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(bootR - 6, bby - 28, 20, 22);
+  // Boot highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.fillRect(bootL - 8, bby - 24, 8, 14);
+  ctx.fillRect(bootR - 4, bby - 24, 8, 14);
+
+  // ── TORSO (athletic, slightly shaded) ────────────────────────────
+  ctx.save();
+  ctx.translate(bx, bby - 88);
+  ctx.rotate(torsoLean);
+
+  // Body
+  ctx.fillStyle = '#f0b060';   // skin tone
+  // Torso shape: wider at shoulders, taper to waist
+  ctx.beginPath();
+  ctx.moveTo(-26, 0);
+  ctx.bezierCurveTo(-30, -30, -28, -55, -22, -62);
+  ctx.lineTo(22, -62);
+  ctx.bezierCurveTo(28, -55, 30, -30, 26, 0);
+  ctx.closePath(); ctx.fill();
+  // Muscle shading (chest line, abs)
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(0, -58); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-18, -30); ctx.lineTo(18, -30); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-18, -42); ctx.lineTo(18, -42); ctx.stroke();
+  // Side shading
+  ctx.fillStyle = 'rgba(0,0,0,0.1)';
+  ctx.beginPath(); ctx.moveTo(-26, 0); ctx.bezierCurveTo(-30,-20,-28,-50,-22,-62); ctx.lineTo(-10,-62); ctx.lineTo(-14, 0); ctx.closePath(); ctx.fill();
+
+  // ── LEFT ARM (guard — tucked in, glove near chin) ────────────────
+  const guardY = state === 'PUNCH' ? -50 : -48 + Math.sin(t * 0.09) * 2;  // stays up in guard
+  ctx.fillStyle = '#f0b060';
+  // Upper arm
+  ctx.beginPath();
+  ctx.ellipse(-22, -50, 11, 20, 0.3, 0, Math.PI * 2); ctx.fill();
+  // Forearm angled up
+  ctx.beginPath();
+  ctx.ellipse(-28, guardY + 2, 10, 16, -0.4, 0, Math.PI * 2); ctx.fill();
+  // LEFT GLOVE (red, guard position — near face)
+  ctx.fillStyle = '#dd1111';
+  ctx.beginPath(); ctx.ellipse(-32, guardY - 10, 16, 13, -0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#cc0000';
+  ctx.beginPath(); ctx.ellipse(-34, guardY - 14, 10, 8, -0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath(); ctx.ellipse(-28, guardY - 18, 5, 4, -0.5, 0, Math.PI * 2); ctx.fill();
+
+  // ── RIGHT ARM (PUNCH arm — extends fully forward on punch) ───────
+  const punchReach = 48 + pp * 52;   // 48 idle → 100 full punch
+  const punchArmY  = -50 - pp * 4;
+  ctx.fillStyle = '#f0b060';
+  // Upper arm
+  ctx.beginPath();
+  ctx.ellipse(22, -50, 12, 20, -0.25 + pp * 0.3, 0, Math.PI * 2); ctx.fill();
+  // Forearm
+  ctx.beginPath();
+  ctx.ellipse(22 + punchReach * 0.4, punchArmY - 2, 11, 16, -0.1 - pp * 0.2, 0, Math.PI * 2); ctx.fill();
+  // RIGHT GLOVE (red, punch fist — rotates forward)
+  ctx.fillStyle = '#dd1111';
+  ctx.save();
+  ctx.translate(22 + punchReach, punchArmY);
+  ctx.rotate(pp * 0.4);
+  ctx.beginPath(); ctx.ellipse(0, 0, 18 + pp * 4, 14, 0, 0, Math.PI * 2); ctx.fill();
+  // Knuckle highlight
+  ctx.fillStyle = '#cc0000';
+  ctx.beginPath(); ctx.ellipse(10, -2, 10, 8, 0.2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.beginPath(); ctx.ellipse(14, -6, 5, 4, 0.3, 0, Math.PI * 2); ctx.fill();
+  // Impact flash on full punch
+  if (pp > 0.85) {
+    ctx.fillStyle = 'rgba(255,255,100,0.7)';
+    ctx.beginPath(); ctx.arc(18, 0, 14, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  // ── HEAD position (shifts with torso lean + hurt snap) ───────────
+  const headX = state === 'PUNCH' ? 6 * pp
+              : state === 'HURT'  ? -20 + hurtProg * 6
+              : 0;
+  const headTilt = state === 'PUNCH' ? 0.1 * pp
+                 : state === 'HURT'  ? -0.28
+                 : 0;
 
   ctx.save();
-  let ox = 0, oy = 0;
-  if (state === 'PUNCH') ox = 16 + Math.sin(PA.t * 0.22) * 12;
-  if (state === 'HURT')  { ox = -14; oy = PA.t % 8 < 4 ? -5 : 0; }
-  if (state === 'KO')    { ctx.translate(cx, by); ctx.rotate(0.42); ctx.translate(-cx, -by); oy = 22; }
-  if (state === 'WIN')   oy = -Math.abs(Math.sin(t * 0.12)) * 16;
+  ctx.translate(headX, -62 + bob);
+  ctx.rotate(headTilt);
 
-  const bob = state === 'IDLE' ? Math.sin(t * 0.07) * 3 : 0;
-  const x = cx + ox, y = by + oy;
-
-  // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.38)';
-  ctx.beginPath(); ctx.ellipse(x, by - 3, 40, 10, 0, 0, Math.PI * 2); ctx.fill();
-
-  // Legs
-  const walk = state === 'IDLE' ? (Math.sin(t * 0.1) > 0 ? 1 : 0) : 0;
-  const ll = walk ? 6 : -4, rl = walk ? -4 : 6;
-  ctx.fillStyle = '#3366cc';
-  ctx.fillRect(x - 30, y - 60 + bob, 24, 34 + ll);
-  ctx.fillRect(x + 6,  y - 60 + bob, 24, 34 + rl);
-  // Boots
-  ctx.fillStyle = '#5a2800';
-  ctx.beginPath(); ctx.ellipse(x - 22, y - 26 + bob + ll, 22, 11, -0.14, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(x + 20, y - 26 + bob + rl, 22, 11,  0.14, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#7a3c00';
-  ctx.fillRect(x - 40, y - 34 + bob + ll, 36, 10);
-  ctx.fillRect(x + 4,  y - 34 + bob + rl, 36, 10);
-
-  // Overalls body
-  ctx.fillStyle = '#3366cc'; ctx.fillRect(x - 36, y - 104 + bob, 72, 48);
-  // Bib
-  ctx.fillStyle = '#2255aa'; ctx.fillRect(x - 20, y - 116 + bob, 40, 26);
-  // Straps
-  ctx.fillRect(x - 22, y - 122 + bob, 9, 20); ctx.fillRect(x + 13, y - 122 + bob, 9, 20);
-  // Buttons
-  ctx.fillStyle = '#ffdd00';
-  ctx.beginPath(); ctx.arc(x - 13, y - 107 + bob, 4.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + 13, y - 107 + bob, 4.5, 0, Math.PI * 2); ctx.fill();
-
-  // Red shirt
-  ctx.fillStyle = '#cc2200'; ctx.fillRect(x - 40, y - 134 + bob, 80, 36);
-
-  // Left arm
-  ctx.fillStyle = '#cc2200'; ctx.fillRect(x - 56, y - 130 + bob, 20, 30);
-  // Right arm (extends on punch)
-  const rax = state === 'PUNCH' ? x + 36 + 30 : x + 36;
-  ctx.fillRect(rax, y - 130 + bob, 20, 30);
-
-  // Gloves
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath(); ctx.ellipse(x - 48, y - 107 + bob, 18, 14, -0.28, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ddd'; ctx.fillRect(x - 60, y - 120 + bob, 22, 15);
-  ctx.fillStyle = '#ffffff';
-  const rgx = state === 'PUNCH' ? rax + 26 : rax + 14;
-  ctx.beginPath(); ctx.ellipse(rgx, y - 107 + bob, 18, 14, 0.28, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ddd'; ctx.fillRect(rgx - 12, y - 120 + bob, 22, 15);
-  // Glove shine
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.beginPath(); ctx.ellipse(x - 44, y - 114 + bob, 6, 5, -0.3, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(rgx + 4, y - 114 + bob, 6, 5, 0.3, 0, Math.PI * 2); ctx.fill();
+  // Neck
+  ctx.fillStyle = '#f0b060';
+  ctx.fillRect(-8, 2, 16, 14);
 
   // Head
   ctx.fillStyle = '#f4c87a';
-  ctx.beginPath(); ctx.ellipse(x, y - 158 + bob, 34, 31, 0, 0, Math.PI * 2); ctx.fill();
-  // Ears
-  ctx.beginPath(); ctx.arc(x - 32, y - 158 + bob, 11, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + 32, y - 158 + bob, 11, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#e8b870';
-  ctx.beginPath(); ctx.arc(x - 32, y - 158 + bob, 6.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + 32, y - 158 + bob, 6.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, -16, 28, 26, headTilt * 0.3, 0, Math.PI * 2); ctx.fill();
 
-  // Eyes
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.ellipse(x - 12, y - 162 + bob, 10, 11, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(x + 12, y - 162 + bob, 10, 11, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#3a2a10';
-  ctx.beginPath(); ctx.arc(x - 11, y - 161 + bob, 5.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + 13, y - 161 + bob, 5.5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.arc(x - 10, y - 160 + bob, 2.8, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + 14, y - 160 + bob, 2.8, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(x - 8, y - 165 + bob, 1.8, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + 16, y - 165 + bob, 1.8, 0, Math.PI * 2); ctx.fill();
+  // Ear
+  ctx.fillStyle = '#f4c87a';
+  ctx.beginPath(); ctx.arc(-26, -16, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e0a860';
+  ctx.beginPath(); ctx.arc(-26, -16, 5, 0, Math.PI * 2); ctx.fill();
+
+  // HURT face: squinted eyes, open mouth pain
+  if (state === 'HURT' || state === 'KO') {
+    // Squinted eyes
+    ctx.fillStyle = '#3a2a10';
+    ctx.beginPath(); ctx.ellipse(-10, -22, 9, 4, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(10, -20, 9, 4, -0.3, 0, Math.PI * 2); ctx.fill();
+    // Pained mouth
+    ctx.fillStyle = '#8a2a10';
+    ctx.beginPath(); ctx.ellipse(0, -6, 10, 7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#cc4422';
+    ctx.beginPath(); ctx.arc(0, -3, 6, 0, Math.PI); ctx.fill();
+    // Pain sweat drops
+    ctx.fillStyle = '#88ccff';
+    ctx.beginPath(); ctx.arc(-20, -30, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(22, -28, 2, 0, Math.PI * 2); ctx.fill();
+  } else {
+    // Normal eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(-10, -22, 9, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(10, -22, 9, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3a2a10';
+    ctx.beginPath(); ctx.arc(-9, -21, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(11, -21, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(-8, -20, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(12, -20, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-6, -24, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(14, -24, 1.5, 0, Math.PI * 2); ctx.fill();
+    // Determined mouth
+    ctx.fillStyle = '#c07840';
+    ctx.strokeStyle = '#a06030'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-10, -5); ctx.lineTo(10, -5); ctx.stroke();
+  }
 
   // Nose
-  ctx.fillStyle = '#e0a060';
-  ctx.beginPath(); ctx.ellipse(x, y - 152 + bob, 10, 9, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e09050';
+  ctx.beginPath(); ctx.ellipse(2, -12, 8, 7, 0, 0, Math.PI * 2); ctx.fill();
 
-  // Big bushy mustache
-  ctx.fillStyle = '#3a2a10';
-  ctx.beginPath(); ctx.ellipse(x - 13, y - 143 + bob, 15, 8, -0.18, 0, Math.PI); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(x + 13, y - 143 + bob, 15, 8,  0.18, 0, Math.PI); ctx.fill();
+  // Bushy mustache
   ctx.fillStyle = '#2a1a08';
-  ctx.beginPath(); ctx.ellipse(x - 13, y - 146 + bob, 15, 6, -0.14, 0, Math.PI); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(x + 13, y - 146 + bob, 15, 6,  0.14, 0, Math.PI); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-10, -4, 13, 7, -0.15, 0, Math.PI); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10, -4, 13, 7,  0.15, 0, Math.PI); ctx.fill();
+  ctx.fillStyle = '#1a0e04';
+  ctx.beginPath(); ctx.ellipse(-10, -6, 13, 5, -0.12, 0, Math.PI); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10, -6, 13, 5,  0.12, 0, Math.PI); ctx.fill();
 
-  // Cap
+  // Mario cap
   ctx.fillStyle = '#cc2200';
-  ctx.beginPath(); ctx.ellipse(x, y - 182 + bob, 42, 14, 0, Math.PI, Math.PI * 2); ctx.fill();
-  ctx.fillRect(x - 42, y - 184 + bob, 84, 5);
-  ctx.beginPath(); ctx.ellipse(x - 2, y - 196 + bob, 32, 24, 0, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2, -34, 34, 12, 0, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.fillRect(-34, -36, 68, 5);
+  ctx.beginPath(); ctx.ellipse(0, -46, 26, 20, 0, Math.PI, Math.PI * 2); ctx.fill();
   // M badge
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath(); ctx.arc(x - 2, y - 196 + bob, 15, Math.PI, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#cc2200'; ctx.font = 'bold 17px monospace'; ctx.textAlign = 'center';
-  ctx.fillText('M', x - 2, y - 188 + bob);
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(0, -46, 13, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#cc2200'; ctx.font = 'bold 15px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('M', 0, -39);
 
-  // KO / Hurt stars
+  ctx.restore(); // head
+  ctx.restore(); // torso
+
+  // ── Stars on hurt ─────────────────────────────────────────────────
   if (state === 'HURT' || state === 'KO') {
-    ctx.fillStyle = '#ffff00';
-    for (let s = 0; s < 5; s++) {
-      const sa = s * 1.26 + t * 0.28;
-      const sr = 26 + Math.sin(t * 0.15) * 5;
-      ctx.font = '14px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('★', x + Math.cos(sa) * sr, y - 148 + bob + Math.sin(sa) * sr);
+    for (let s = 0; s < 6; s++) {
+      const sa = s * 1.05 + t * 0.3;
+      const sr = 28 + Math.sin(t * 0.2) * 5;
+      ctx.fillStyle = s % 2 === 0 ? '#ffff00' : '#ffffff';
+      ctx.font = '13px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('★', bx + hipX + Math.cos(sa) * sr, bby - 148 + bob + Math.sin(sa) * sr);
     }
   }
   ctx.textAlign = 'left';
