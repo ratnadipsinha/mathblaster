@@ -93,21 +93,25 @@ function genPuzzle() {
   const tMax = GS.round <= 1 ? 4 : GS.round <= 2 ? 6 : GS.round <= 3 ? 8 : GS.round <= 4 ? 9 : 12;
   const tMin = GS.round <= 2 ? 2 : GS.round <= 3 ? 3 : 4;
   const a = Math.floor(Math.random() * (tMax - tMin + 1)) + tMin;
-  const b = Math.floor(Math.random() * 8) + 2; // 2-9 = answer = punch count
-  const c = a * b;
-  const wrongs = new Set();
+  const b = Math.floor(Math.random() * 8) + 2; // 2-9
+  const correct = a * b;                       // answer = product
+  const punches = Math.min(a, b);              // punch count = smaller factor
+
+  // Traps: include both factors (a and b) as wrong options
+  const wrongs = new Set([a, b]);
+  // Add one more distractor (nearby product)
   let tries = 0;
   while (wrongs.size < 3 && tries++ < 60) {
-    const off = Math.floor(Math.random() * 4) + 1;
-    const w   = b + (Math.random() < 0.5 ? off : -off);
-    if (w >= 2 && w <= 12 && w !== b) wrongs.add(w);
+    const off = (Math.floor(Math.random() * 3) + 1) * (Math.random() < 0.5 ? a : b);
+    const w   = correct + (Math.random() < 0.5 ? off : -off);
+    if (w > 0 && w !== correct && w !== a && w !== b) wrongs.add(w);
   }
   while (wrongs.size < 3) {
-    const w = Math.floor(Math.random() * 9) + 2;
-    if (w !== b) wrongs.add(w);
+    const w = correct + (Math.random() < 0.5 ? a : -b);
+    if (w > 0 && w !== correct) wrongs.add(w);
   }
-  const opts = [...wrongs, b].sort(() => Math.random() - 0.5);
-  return { a, b, c, correct: b, opts };
+  const opts = [...wrongs, correct].sort(() => Math.random() - 0.5);
+  return { a, b, correct, punches, opts };
 }
 
 function startPuzzle() {
@@ -115,7 +119,7 @@ function startPuzzle() {
   const p = genPuzzle();
   const ms = Math.max(2000, 5200 - (GS.round - 1) * 300);
   PZ = { active:true, ...p, startTime:performance.now(), timerMs:ms, timerPct:1, answered:false };
-  document.getElementById('pz-question').textContent = `${p.a} × ? = ${p.c}`;
+  document.getElementById('pz-question').textContent = `${p.a} × ${p.b} = ?`;
   const ansEl = document.getElementById('pz-answers');
   ansEl.innerHTML = '';
   p.opts.forEach(opt => {
@@ -161,7 +165,7 @@ function onAnswer(val, btn) {
     GS.qNum++;
     GS.combo++;
     GS.state = 'FIGHTING';
-    doPlayerPunch(PZ.correct, elapsed);
+    doPlayerPunch(PZ.punches, elapsed);
   } else {
     btn.classList.add('wrong');
     document.querySelectorAll('.ans-btn').forEach(b => {
