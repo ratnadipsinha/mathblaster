@@ -742,44 +742,127 @@ function drawDragon(cx, by, m, state, _t, bob) {
 
 // ── HUD ───────────────────────────────────────────────────────────
 function drawHUD() {
-  const m = getMon();
-  ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, W, 48);
+  const m   = getMon();
+  const BAR_W = 224;   // width of each energy bar
+  const BAR_H = 22;
+  const BAR_Y = 10;
+  const LABEL_Y = BAR_Y + 14;
 
-  // Player HP
-  ctx.fillStyle = '#222'; ctx.fillRect(10, 8, 184, 20);
-  const pp = Math.max(0, GS.playerHP / 100);
-  ctx.fillStyle = pp > 0.5 ? '#22dd44' : pp > 0.25 ? '#ddaa22' : '#dd2222';
-  ctx.fillRect(10, 8, 184 * pp, 20);
-  ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.strokeRect(10, 8, 184, 20);
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left';
-  ctx.fillText('MARIO', 15, 22);
-  ctx.font = '10px monospace'; ctx.fillStyle = '#ffaaaa';
-  ctx.fillText(Math.round(GS.playerHP) + ' HP', 15, 38);
+  // ── Background panel ──
+  ctx.fillStyle = 'rgba(0,0,0,0.82)';
+  ctx.fillRect(0, 0, W, 60);
+  // Gold top border
+  ctx.fillStyle = '#aa8800';
+  ctx.fillRect(0, 0, W, 3);
 
-  // Monster HP
-  ctx.fillStyle = '#222'; ctx.fillRect(W - 194, 8, 184, 20);
-  const mp = Math.max(0, GS.monsterHP / GS.monsterMaxHP);
-  ctx.fillStyle = mp > 0.5 ? '#dd3333' : mp > 0.25 ? '#dd8822' : '#ff0000';
-  ctx.fillRect(W - 194 + 184 * (1 - mp), 8, 184 * mp, 20);
-  ctx.strokeStyle = '#882222'; ctx.lineWidth = 1; ctx.strokeRect(W - 194, 8, 184, 20);
-  ctx.fillStyle = '#ff8888'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'right';
-  ctx.fillText(m.name, W - 15, 22);
-  ctx.font = '10px monospace'; ctx.fillStyle = '#ffaaaa';
-  ctx.fillText(Math.max(0, GS.monsterHP) + ' HP', W - 15, 38);
+  // ════ MARIO energy bar (left → right drain) ════
+  const pp  = Math.max(0, GS.playerHP / 100);
+  const pLo = pp <= 0.25;
+  const pMid = pp <= 0.5;
 
-  // Center
-  ctx.fillStyle = '#ffdd00'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
-  ctx.fillText('ROUND ' + GS.round, W / 2, 20);
+  // Name label (left of bar)
+  ctx.fillStyle = '#ffdd88'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'left';
+  ctx.fillText('MARIO', 8, LABEL_Y);
+
+  const barX1 = 70; // bar starts after name
+
+  // Bar shadow / track
+  ctx.fillStyle = '#111';
+  ctx.fillRect(barX1, BAR_Y, BAR_W, BAR_H);
+  // Yellow drain (ghost bar)
+  if (pp < 1) {
+    ctx.fillStyle = 'rgba(255,220,0,0.25)';
+    ctx.fillRect(barX1, BAR_Y, BAR_W, BAR_H);
+  }
+  // Main energy fill
+  const pColor = pLo ? '#ff2222' : pMid ? '#ffaa00' : '#22cc44';
+  ctx.fillStyle = pColor;
+  ctx.fillRect(barX1, BAR_Y, BAR_W * pp, BAR_H);
+  // Shiny highlight on bar
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.fillRect(barX1, BAR_Y, BAR_W * pp, BAR_H / 2);
+  // Segment ticks
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1;
+  for (let i = 1; i < 10; i++) {
+    const tx = barX1 + (BAR_W / 10) * i;
+    ctx.beginPath(); ctx.moveTo(tx, BAR_Y); ctx.lineTo(tx, BAR_Y + BAR_H); ctx.stroke();
+  }
+  // Bar border
+  ctx.strokeStyle = pLo ? '#ff4444' : '#666'; ctx.lineWidth = 2;
+  ctx.strokeRect(barX1, BAR_Y, BAR_W, BAR_H);
+  // HP text inside bar
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(Math.ceil(GS.playerHP) + ' / 100', barX1 + BAR_W / 2, BAR_Y + 15);
+  // Danger flash outline
+  if (pLo && Math.sin(globalT * 0.35) > 0) {
+    ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 3;
+    ctx.strokeRect(barX1 - 1, BAR_Y - 1, BAR_W + 2, BAR_H + 2);
+  }
+
+  // ════ MONSTER energy bar (right → left drain) ════
+  const mp  = Math.max(0, GS.monsterHP / GS.monsterMaxHP);
+  const mLo = mp <= 0.25;
+  const mMid = mp <= 0.5;
+
+  // Name label (right of bar)
+  ctx.fillStyle = '#ff9999'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'right';
+  ctx.fillText(m.name, W - 8, LABEL_Y);
+
+  const barX2 = W - 70 - BAR_W; // bar ends before name
+
+  // Track
+  ctx.fillStyle = '#111';
+  ctx.fillRect(barX2, BAR_Y, BAR_W, BAR_H);
+  // Ghost bar
+  if (mp < 1) {
+    ctx.fillStyle = 'rgba(255,220,0,0.25)';
+    ctx.fillRect(barX2, BAR_Y, BAR_W, BAR_H);
+  }
+  // Monster bar fills right-to-left
+  const mColor = mLo ? '#ff2222' : mMid ? '#ffaa00' : '#cc2222';
+  ctx.fillStyle = mColor;
+  ctx.fillRect(barX2 + BAR_W * (1 - mp), BAR_Y, BAR_W * mp, BAR_H);
+  // Shine
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.fillRect(barX2 + BAR_W * (1 - mp), BAR_Y, BAR_W * mp, BAR_H / 2);
+  // Ticks
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1;
+  for (let i = 1; i < 10; i++) {
+    const tx = barX2 + (BAR_W / 10) * i;
+    ctx.beginPath(); ctx.moveTo(tx, BAR_Y); ctx.lineTo(tx, BAR_Y + BAR_H); ctx.stroke();
+  }
+  // Border
+  ctx.strokeStyle = mLo ? '#ff4444' : '#882222'; ctx.lineWidth = 2;
+  ctx.strokeRect(barX2, BAR_Y, BAR_W, BAR_H);
+  // HP text
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(Math.ceil(GS.monsterHP) + ' / ' + GS.monsterMaxHP, barX2 + BAR_W / 2, BAR_Y + 15);
+  // Danger flash
+  if (mLo && Math.sin(globalT * 0.35) > 0) {
+    ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 3;
+    ctx.strokeRect(barX2 - 1, BAR_Y - 1, BAR_W + 2, BAR_H + 2);
+  }
+
+  // ════ Centre panel ════
+  // Round badge
+  ctx.fillStyle = '#1a1a00';
+  ctx.fillRect(W / 2 - 38, BAR_Y, 76, BAR_H);
+  ctx.strokeStyle = '#aa8800'; ctx.lineWidth = 2;
+  ctx.strokeRect(W / 2 - 38, BAR_Y, 76, BAR_H);
+  ctx.fillStyle = '#ffdd00'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('RND ' + GS.round, W / 2, BAR_Y + 15);
+
+  // Q counter below centre badge
   ctx.fillStyle = '#888'; ctx.font = '10px monospace';
-  ctx.fillText('Q ' + GS.qNum + ' / ' + ROUND_Q, W / 2, 34);
+  ctx.fillText('Q ' + GS.qNum + '/' + ROUND_Q, W / 2, BAR_Y + BAR_H + 14);
 
-  // Score
-  ctx.fillStyle = '#ffdd00'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left';
-  ctx.fillText(GS.score, 14, 46);
+  // Score bottom-left
+  ctx.fillStyle = '#ffdd00'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'left';
+  ctx.fillText(GS.score, 8, 56);
   ctx.fillStyle = '#444'; ctx.font = '9px monospace'; ctx.textAlign = 'right';
-  ctx.fillText('HI:' + GS.hiScore, W - 14, 46);
+  ctx.fillText('HI:' + GS.hiScore, W - 8, 56);
 
-  // Combo
+  // ── Combo flash bottom-centre ──
   if (GS.combo > 1) {
     const sz = Math.min(22, 12 + GS.combo * 1.5);
     ctx.fillStyle = '#ff8800';
